@@ -46,7 +46,7 @@ class_diag <- function(score, truth, positive, cutoff=.5){
 
 # Mining, Classification, Prediction
 
-## Name and EID here
+## Rebecca Hernandez, rh36736
 
 ### Introduction 
 
@@ -54,84 +54,333 @@ Paragraph or two introducing your datasets and variables, why they are interesti
 
 ```{R}
 library(tidyverse)
-# read your datasets in here, e.g., with read_csv()
+library (readr)
+
+urlfile="https://raw.githubusercontent.com/the-pudding/data/master/pockets/measurements.csv"
+
+pockets<-read_csv(url(urlfile))
+head(pockets)
 
 # if your dataset needs tidying, do so here
 
-# any other code here
+pockets %>% group_by(brand) %>% summarise(n=n())
+pockets %>% group_by(style) %>% summarise(n=n())
+pockets %>% group_by(menWomen) %>% summarise(n=n())
+pockets %>% group_by(name) %>% summarise(n=n())
+pockets %>% group_by(fabric) %>% summarise(n=n())
 ```
+*I chose to analyze a data set of pocket sizes in jeans across styles for men and women. This data set has been analyzed before and the published findings showed that women's jeans tend to have much smaller pocket sizes than men's. I thought this would be an interesting data set to analyze because I enjoy fashion and the idea of finding trends like the one mentioned before based on data. I found the data from this document of datasets. https://docs.google.com/spreadsheets/d/1wZhPLMCHKJvwOkP4juclhjFgqIY8fQFMemwKL2c64vk/edit#gid=0 The original data set lives in a repository on github https://github.com/the-pudding/data/tree/master/pockets and was analyzed with reported findings here https://pudding.cool/2018/08/pockets/. *
+
+*This data set includes variables of brand name (brand), jean style (style), targeted demographic (menWoman), name of jean style (name), fabric composition (fabric), price (price), maximum height for the front pocket (maxHeightFront), minimum height for the front pocket (minHeightFront), height of rivets for front pockets (rivetHeightFront), maximum width for front pockets (maxWidthFront), minimum width for front pockets (minWidthFront), maximum height for back pockets (maxHeightBack), minimum height for back pockets (minHeightBack), maximum width for back pockets (maxWidthBack), minimum width for back pockets (minWidthBack), and whether or not the jeans have a cutout (cutout). This data set has 16 variables and 80 observations. For brand, there are 21 categories. For style, there are 5 categories. For menWomen, there are 2 variables. For name, there are 70 variables. For fabric, there are 43 variables. For cutout, there are 2 variables. The rest of the variables are numeric with more than 10 distinct variables for each.*
+
 
 ### Cluster Analysis
 
 ```{R}
 library(cluster)
-# clustering code here
+clust_dat<-pockets%>%dplyr::select(7:15)
+#determining number of clusters - 2 clusters
+wss<-vector()
+for(i in 1:10){
+temp<-pockets%>%dplyr::select(7:15)%>%kmeans(.,i+1)
+wss[i]<-temp$tot.withinss
+}
+ggplot()+geom_point(aes(x=2:11,y=wss))+geom_path(aes(x=2:11,y=wss))+
+  xlab("clusters")+scale_x_continuous(breaks=2:11) #k=2
+
+library(cluster)
+sil_width<-vector()
+for(i in 2:10){  
+  kms <- kmeans(clust_dat,centers=i)
+  sil <- silhouette(kms$cluster,dist(clust_dat)) 
+  sil_width[i]<-mean(sil[,3]) 
+}
+ggplot()+geom_line(aes(x=1:10,y=sil_width))+scale_x_continuous(name="k",breaks=1:10)#k=2
+
+
+
+#pam clustering
+clust_dat<-pockets%>%dplyr::select(7:15)
+
+kmeans1 <- clust_dat %>% kmeans(2)
+kmeans1
+
+set.seed(322)
+pam1<-clust_dat%>%pam(k=2)
+pam1
+
+pamclust<-clust_dat%>%mutate(cluster=as.factor(pam1$clustering)) 
+
+#pamclust ggplot
+pamclust%>%ggplot(aes(maxHeightFront, minHeightFront, rivetHeightFront, maxWidthFront, minWidthFront, maxHeightBack, minHeightBack, maxWidthBack, minWidthBack, color=cluster))+geom_point() 
+
+pockets%>%
+  ggplot(aes(maxHeightFront,minHeightFront,color=menWomen)) + geom_point()
+
+pamclust%>%group_by(cluster)%>%summarize_if(is.numeric,mean,na.rm=T)
+
+#mediods
+pockets%>%slice(pam1$id.med)
+
+#cluster visualization
+library(GGally)
+ggpairs(pamclust, aes(color=cluster))
+
+#goodness of fit
+pam1$silinfo$avg.width
+plot(pam1,which=2)
+
+
 ```
 
-Discussion of clustering here
+*The data was a bit overhwleming to analyze at first since I looked at 6 variables, but I started by looking at the mediods which are the most representative of their cluster. At first, I wasn't sure which variable belonged to which cluster, but then I noticed that one variable had consistently lower numeric variable values than the other. Based on the pamclust ggplot, I concluded that the variable with the lower values must belong to cluster 1 and the variable with the highers belonged to cluster 2. I concluded this because variables in cluster 1 are all on the lower ends of both the y and x axes while the variables in cluster 2 tend to be on the higher ends of the y and x axes. I then compared the cluster ggplot to a plot of maxHeightFront and minHeightFront categorized by menWomen and the graphs looks nearly identical. The non-cluster plot shows that women's jeans tend to have a smaller min and max height while men's jeans have a higher min and max height front. Based on this information, the clusters appear to be distinguished by the menWomen category with cluster 1 likely containing women's jeans and cluster 2 likely containing men's jeans. Even if this were not the case, the clusters demonstrate that a variable, being a pair of jeans, for all numeric variables is likely to be consistently large or small. For example, if a pair of jeans has a small maxHeightFront size pocket, then it will likely have a small minHeightFront, maxHeightBack, so on and so forth which is evident by the observations in cluster 1. When visualizing the cluster combinations, it is still evident that cluster 1 tended to have much smaller values for every variable when compared to cluster 1. The variable combination with the highest correlation was maxHeightBack and minHeightBack (0.788). The variable combination with the lowest correlation was maxWidthBack and maxHeightFront (0.157). Based on the goodness of fit, cluster 1 had an average silhouette width of 0.62 which indicates a reasonable structure was found while cluster 2 had an average silhouette width of 0.45 which indicates the structure is weak and could be artificial. This is not too surprising when looking at the clusters graphed, because you see that cluster 2 is much more spread out than cluster 1 and has many possible outliers.*
     
     
 ### Dimensionality Reduction with PCA
 
 ```{R}
-# PCA code here
+library(tidyverse)
+pockets_nums <-  pockets %>% select_if(is.numeric) %>% scale 
+rownames(pockets_nums) <-  pockets$brand
+pockets_pca <-  princomp(pockets_nums)
+names(pockets_pca)
+
+
+#PCA summary
+summary(pockets_pca, loadings=T)
+
+eigval <-  pockets_pca$sdev^2
+varprop=round(eigval/sum(eigval), 2) 
+
+ggplot() + geom_bar(aes(y=varprop, x=1:10), stat="identity") + xlab("") + geom_path(aes(y=varprop, x=1:10)) + 
+  geom_text(aes(x=1:10, y=varprop, label=round(varprop, 3)), vjust=1, col="white", size=4) + 
+  scale_y_continuous(breaks=seq(0, .6, .2), labels = scales::percent) + 
+  scale_x_continuous(breaks=1:10)
+
+#keep up to PC5
+
+#comparing PCs with ggplot visualizations
+pocketsdf12 <-  data.frame(PC1=pockets_pca$scores[, 1], PC2=pockets_pca$scores[, 2])
+ggplot(pocketsdf12, aes(PC1, PC2)) + geom_point(aes(color=PC1))
+
+pocketsdf34 <-  data.frame(PC3=pockets_pca$scores[, 3], PC4=pockets_pca$scores[, 4])
+ggplot(pocketsdf34, aes(PC3, PC4)) + geom_point(aes(color=PC3))
+
+pocketsdf15 <-  data.frame(PC1=pockets_pca$scores[, 1], PC5=pockets_pca$scores[, 5])
+ggplot(pocketsdf15, aes(PC1, PC5)) + geom_point(aes(color=PC1))
+
+pocketsdf <-  data.frame(PC1=pockets_pca$scores[, 1], PC2=pockets_pca$scores[, 2], PC3=pockets_pca$scores[, 3], PC4=pockets_pca$scores[, 4], PC5=pockets_pca$scores[, 5])
+
+
+
+#visualizing all variables
+pockets_pca$loadings[1:7, 1:7] %>% as.data.frame %>% rownames_to_column %>% 
+ggplot() + geom_hline(aes(yintercept=0), lty=2) + 
+  geom_vline(aes(xintercept=0), lty=2) + ylab("PC2") + xlab("PC1") + 
+  geom_segment(aes(x=0, y=0, xend=Comp.1, yend=Comp.2), arrow=arrow(), col="red") + 
+  geom_label(aes(x=Comp.1*1.1, y=Comp.2*1.1, label=rowname))
+
+
+
 ```
 
-Discussions of PCA here. 
+*When looking at the numeric variables in the pockets dataset, it was determined that selecting up to PC5 would be a good measurement of variables. PC1 is a general trend determination where a decrease in one type of pocket size measurement correlates with a decrease in remaining measurements. To score high on PC1 would mean to have small pocket measurements and to score low on PC1 would mean to have a larger pocket measurement. PC2 is a comparison of front pocket measurements to back pocket measurements where an increase in unit for front pocket measurements signal a decrease in unit for back pocket measurements. So in essence, to score high on PC2 would mean to have larger front pockets than back pockets. PC3 compares price with pocket height versus pocket width where an increase in price also relates to higher pocket height and lower pocket width. So to score high on PC3 would mean  to have longer yet narrower pockets. PC4 also compares price but with front pocket height, front pocket width, and maximum back pocket width. For PC4, a higher price correlated with lower front pocket height, higher front pocket width, and a higher maximum back pocket width. PC5 compares rivet height of front pockets with front pocket width, back pocket height, and the min back pocket width. For PC5, a higher front pocket rivet height correlates to lower front pocket width, lower back pocket height, and a higher minimum back pocket width.  85.05% of the total variance in the dataset is explained by these PCs* 
 
 ###  Linear Classifier
 
 ```{R}
-# linear classifier code here
+#linear regression
+class_dat <- pockets %>% select(menWomen, maxHeightFront:minWidthBack)
+class_dat <- class_dat %>% mutate(menWomen = ifelse(menWomen=="men", 1, 0)) #men=1=true
+
+#predict with best fitting line
+class_dat%>% ggplot(aes(maxHeightFront,menWomen))+geom_point()+geom_smooth(method="lm", se=F)+ylim(0,1)
+
+#confusion matrix
+fit <- lm(menWomen ~ maxHeightFront:minWidthBack, data=class_dat, family="binomial")
+probs <- predict(fit, type="response")
+class_diag(probs, class_dat$menWomen, positive="men") 
+table(truth = class_dat$menWomen, predictions = probs>.5)
+
+#fitting the model 
+fit <- lm(menWomen ~ maxHeightFront:minWidthBack, data=class_dat)
+score <- predict(fit)
+score %>% round(3)
+
+#graphing it
+class_dat%>% mutate(score=score) %>% ggplot(aes(menWomen,maxHeightFront))+geom_point(aes(color=score>.5))+
+  geom_smooth(method="lm", se=F)+ylim(10,25)+geom_hline(yintercept=17.5, lty=2)
+
+#how well is model doing
+class_diag(score,truth=class_dat$menWomen, positive=1)
+
+#alternate confusion matrix
+y<-pockets$menWomen
+x<-pockets$maxHeightFront
+
+y<- factor(y, levels=c("men","women"))
+y_hat <- sample(c("men","men"), size=length(y), replace=T)
+pockets %>% select(maxHeightFront, menWomen) %>% mutate(predict=y_hat) %>% head
+mean(y==y_hat) 
+
+ggplot(data.frame(x,y), aes(x))+geom_density(aes(fill=y), alpha=.5)
+ggplot(data.frame(x,y_hat), aes(x))+geom_density(aes(fill=y_hat), alpha=.5)
+
+y_hat <- ifelse(x>19, "men", "women")
+pockets %>% select(maxHeightFront, menWomen) %>% mutate(predict=y_hat) %>% head
+mean(y==y_hat) 
+
+accuracy <- vector()
+cutoff <- 1:20 
+
+for(i in cutoff){
+  y_hat <- ifelse(x>i, "men", "women")
+  accuracy[i] <- mean(y==y_hat) 
+}
+
+qplot(y=accuracy)+geom_line()+scale_x_continuous(breaks=1:20)
+
+max(accuracy)
+cutoff[which.max(accuracy)]
+
+y_hat <- factor(y_hat, levels=c("men","women"))
+table(actual = y, predicted = y_hat)
+table(actual=y, predicted = y_hat) %>% addmargins
 ```
 
 ```{R}
-# cross-validation of linear classifier here
+library(tidyverse)
+fit <- glm(menWomen~maxHeightFront:minWidthBack,data=class_dat,family="binomial") #fit model
+prob <- predict(fit,type="response") #get predicted probabilities
+class_diag(prob,class_dat$menWomen,positive=1)
+
+set.seed(1234)
+k=10 
+
+data<-class_dat[sample(nrow(class_dat)),]
+folds<-cut(seq(1:nrow(class_dat)),breaks=k,labels=F) 
+
+diags<-NULL
+for(i in 1:k){
+  train<-data[folds!=i,] 
+  test<-data[folds==i,]
+  truth<-test$menWomen
+  
+  fit<-glm(menWomen~maxHeightFront:minWidthBack, data=train, family="binomial")
+  
+  probs<-predict(fit,newdata = test,type="response")
+
+  diags<-rbind(diags,class_diag(probs,truth, positive=1))
+}
+summarize_all(diags,mean)
 ```
 
-Discussion here
+*For the linear classifier, I chose to predict whether the jean's were men's or women's fit (menWomen) based on all other numeric variables including all pocket measurement variables (maxHeightFront:minWidthBack). I started by predicting a best fit line by taking the raw dating and using ggplot with a linear regression prdictor to get an idea of any relationship that might already exist. Then I created a confusion matrix with the linear fitting model. I also created an additional confusion matrix using the process we discussed for manually predicting a binary variable from a numeric variable. The automatic confusion matrix computed 80 observations and produced 38 true negatives, 2 false negatives, 40 true positives and 0 false positives. The manual confusion matrix gave 39 true negatives, 1 false negative, 39 true positives, and 1 false positive. I then created a linear fit for menWomen to the rest of the maxHeightFront:minWidthBack variables. and graphed it on ggplot which matched the confusion matrix and showed the 1 false positive on the side with the rest of the true positives. Based on the class_diag, the model is doing well per 0.9938 AUC which is pretty high and indicates an accurate model. This shows that the size of the pocket, based on any parameter (ex, front width, back height, etc.) is an accurate predictor for gender/style of jean. After doing a k-fold cross-validation, the area under the curve changed slightly to a 0.9428 new observations per CV AUC number which is still relatively high and supports the linear regression model developed. The model appears to be good at predicting new observations per CV AUC. It does not look like there are any signs of overfitting based on AUC values, confusion matrix, and cross validation.*
 
 ### Non-Parametric Classifier
 
 ```{R}
 library(caret)
-# non-parametric classifier code here
+knn_fit <- knn3(factor(menWomen==1,levels=c("TRUE","FALSE")) ~ maxHeightFront:minWidthBack, data=class_dat, k=5)
+y_hat_knn <- predict(knn_fit,class_dat)
+y_hat_knn
+
+data.frame(y_hat_knn,names=rownames(class_dat))%>% arrange(names)
+
+table(truth= factor(class_dat$menWomen==1, levels=c("TRUE","FALSE")),
+      prediction= factor(y_hat_knn[,1]>.5, levels=c("TRUE","FALSE")))
+
+class_diag(y_hat_knn[,1],class_dat$menWomen, positive=1)
 ```
 
 ```{R}
 # cross-validation of np classifier here
+set.seed(1234)
+k=10 
+data<-class_dat[sample(nrow(class_dat)),]
+folds<-cut(seq(1:nrow(class_dat)),breaks=k,labels=F)
+diags<-NULL
+for(i in 1:k){
+  train<-data[folds!=i,] 
+  test<-data[folds==i,]
+  truth<-test$menWomen 
+  fit<-knn3(menWomen~maxHeightFront:minWidthBack,data=train)
+  probs<-predict(fit,newdata = test)[,2]
+  diags<-rbind(diags,class_diag(probs,truth, positive=1))
+}
+summarize_all(diags,mean)
+
+
 ```
 
-Discussion
+*For the non-parametric classifier, I chose to apply a knn analysis to the same data and variables as the linear regression one. The model predicted outcomes in the confusion matrix include 40 true positives, 0 false negatives, 38 true negatives, and 2 false positives. When applying the class_diag function, we see that the AUC value is 0.9962 which is a very high number. Upon doing k-fold cross validation with knn, the auc number slightly decreased to 0.98667 which is still a relatively high number and reflects a strong level of accuracy for th model. It does not look lik there are any signs of overfitting. When compared to the linear regression model, it appears to be a much more accurate predictor because it has higher AUC values for the original model and it's cross validation. As a result, the model is highly accurate when predicting the gender/style of jean based on the measurements of the jean's pockets. *
 
 
 ### Regression/Numeric Prediction
 
 ```{R}
 # regression model code here
+fit<-lm(price~.,data=pockets)#predict price from all other variables
+yhat<-predict(fit)#predicted price
+mean((pockets$price-yhat)^2) #mean squared error (MSE)
+
+
 ```
 
 ```{R}
 # cross-validation of regression model here
+set.seed(1234)
+k=5 
+data<-pockets[sample(nrow(pockets)),] 
+folds<-cut(seq(1:nrow(pockets)),breaks=k,labels=F) 
+diags<-NULL
+for(i in 1:k){
+  train<-data[folds!=i,]
+  test<-data[folds==i,]
+  fit<-lm(price~.,data=pockets)
+  yhat<-predict(fit,newdata=test)
+  diags<-mean((test$price-yhat)^2) 
+}
+mean(diags) ## get average MSE across all folds (much higher error)!
+
+0.00000000000000000000000003169406-0.0000000000000000000000000451729
+
 ```
 
-Discussion
+*The model does not look like it has a sign of overfitting. The mean squared error from the original regression was a very small number which is a good sign, and when we cross-validated it, the CV MSE was less than the original MSE which is a good sign and means that there was not overfitting. As a result, the linear regression also works for predicting price based on any other variable in the data set.*
 
 ### Python 
 
 ```{R}
 library(reticulate)
+use_python("/usr/bin/python3", required = F)
+hi<-"Hello"
+pockets
+x <- pockets$maxHeightFront
+y <- pockets$price
 ```
 
 ```{python}
-# python code here
+hi="world"
+print(r.hi,hi) 
+
+import pandas as pd
+import seaborn as sns
+pockets=r.pockets
+
+pockets.loc[0:5,"menWomen":"maxHeightFront"]
+median_maxHeightFront = pockets["maxHeightFront"].median()
+print(median_maxHeightFront)
+
+variance_maxHeightFront = pockets["maxHeightFront"].var()
+print(variance_maxHeightFront)
 ```
 
-Discussion
+*For my python code chunk, I shared the pockets dataset from R to python. I then played around with the data set in python by tidying the data by selecting certain variables and performing some summary statistics like median and variance.*
 
 ### Concluding Remarks
 
-Include concluding remarks here, if any
+*The analyses computed in this dataset support the findings found in the study mentioned earlier that shows pockets for women's jeans are much smaller than that of men's jeans. This might seem like something that is rather obious, but by using real data and analysis methods, we can further prove on a numerical basis that pocket sizes are correlated with men's or women's style jeans.*
 
 
 
